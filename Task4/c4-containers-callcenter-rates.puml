@@ -1,0 +1,47 @@
+@startuml
+!include <C4/C4_Container>
+
+title C4 Containers - Передача ставок в кол-центры\nContainer diagram [Банк "Стандарт"]
+
+Person(bo_manager, "Менеджер бэк-офиса", "")
+Person(cc_operator, "Оператор кол-центра", "")
+Person(pcc_operator, "Оператор партнёра", "")
+
+System_Boundary(abs_boundary, "АБС") {
+    Container(abs_rates, "Модуль ставок", "PL/SQL", "Расчёт и хранение ставок") <<new>>
+    Container(abs_kafka_adapter, "Kafka-адаптер АБС", "Java", "Oracle -> Kafka Producer (deposit-rates)") <<new>>
+    ContainerDb(abs_db, "Oracle DB", "Oracle", "")
+}
+
+Container(kafka, "Apache Kafka", "Кластер", "Topic: deposit-rates") <<new>>
+
+Container(deposit_api, "Deposit API Service", "Java / Spring Boot", "Кэш ставок, REST API для ИБ и Сайта")
+
+System_Boundary(cc_boundary, "Система кол-центра") {
+    Container(cc_web, "КЦ Web App", "React.js / Java Spring Boot", "Раздел «Депозитные ставки» (новый UI)")
+    Container(cc_rates_ui, "Раздел ставок", "React.js", "Список депозитов и ставок") <<new>>
+    Container(cc_kafka_consumer, "Kafka Consumer", "Java / Spring Boot", "Получает ставки из Kafka, сохраняет в PostgreSQL КЦ") <<new>>
+    ContainerDb(cc_db, "PostgreSQL", "PostgreSQL", "КЦ (ставки)")
+}
+
+Container(exporter, "Rates File Exporter", "Java / Spring Boot", "Kafka Consumer -> CSV -> SFTP") <<new>>
+Container(sftp, "SFTP-сервер", "Linux / OpenSSH", "Файлы CSV со ставками") <<new>>
+System_Ext(pcc, "Система партнёрского кол-центра", "")
+
+Rel(bo_manager, abs_rates, "Обновляет ставки", "Десктоп")
+Rel(abs_rates, abs_db, "", "PL/SQL")
+Rel(abs_kafka_adapter, abs_db, "Читает ставки", "JDBC")
+Rel(abs_kafka_adapter, kafka, "Публикует ставки", "Kafka Producer")
+Rel(kafka, deposit_api, "Ставки", "Kafka Consumer")
+Rel(kafka, cc_kafka_consumer, "Ставки", "Kafka Consumer")
+Rel(kafka, exporter, "Ставки", "Kafka Consumer")
+Rel(exporter, sftp, "CSV файл", "SFTP upload")
+Rel(sftp, pcc, "Забирает файлы", "SFTP download")
+Rel(cc_operator, cc_web, "", "Веб")
+Rel(cc_operator, cc_rates_ui, "Ставки", "Веб")
+Rel(cc_kafka_consumer, cc_db, "", "SQL")
+Rel(cc_rates_ui, cc_db, "Читает", "API -> SQL")
+Rel(pcc_operator, pcc, "Смотрит ставки", "")
+
+SHOW_LEGEND()
+@enduml
